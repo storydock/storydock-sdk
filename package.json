@@ -1,0 +1,49 @@
+{
+  "name": "@storydock/storydock-sdk",
+  "version": "0.1.3",
+  "description": "TypeScript SDK for the Storydock API",
+  "type": "module",
+  "main": "./dist-cjs/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/storydock/storydock-sdk.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist-cjs/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "dist-cjs",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/write-cjs-package.mjs",
+    "prepack": "npm run build",
+    "prepare": "npm run build",
+    "test": "npm run build && node --test",
+    "smoke": "npm run build && node scripts/smoke.mjs"
+  },
+  "keywords": [
+    "storydock",
+    "sdk",
+    "typescript",
+    "api"
+  ],
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
