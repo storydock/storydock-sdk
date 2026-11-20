@@ -10,6 +10,7 @@ This package currently wraps the published Storydock schema feed:
 
 - list published stories from the published schema feed
 - fetch a story by slug from the published schema feed
+- filter either call by language, and read each story's other published language versions
 
 The client accepts a workspace API token and sends it as a bearer token.
 
@@ -101,6 +102,25 @@ client.getStory("example-slug").then((story) => {
 	console.log(story.contentHtml);
 });
 ```
+
+## Languages
+
+Stories can be published in several languages (for example an English article and its Korean translation). Pass `language` to only get stories in one language. A bare code also matches its regional variants, so `"en"` matches `"en-US"`.
+
+```ts
+const koreanStories = await client.listStories({ page: 1, pageSize: 10, language: "ko" });
+const story = await client.getStory("example-slug-ko", { language: "ko" });
+```
+
+Every story and list item has `language` and `translations`: the other published language versions of the same article. Use them for a language switcher or hreflang links:
+
+```ts
+for (const translation of story.translations) {
+	console.log(translation.language, translation.title, translation.url);
+}
+```
+
+`language` filtering and `translations` need a Storydock API that supports them; against an older API the filter is ignored and `translations` is empty.
 
 ## Configuration
 

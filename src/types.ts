@@ -12,21 +12,37 @@ export interface PaginationInput {
   pageSize?: number;
 }
 
+export interface LanguageInput {
+  /**
+   * Only return stories in this language, e.g. "ko" or "en-US". A bare language also
+   * matches its regional variants ("en" matches "en-US") and a regional code also
+   * matches stories stored with the bare language.
+   */
+  language?: string;
+}
+
+export interface ListStoriesInput extends PaginationInput, LanguageInput {}
+
+export interface GetStoryInput extends LanguageInput {}
+
 export interface StoryImageAsset {
   id?: string;
   url: string;
   alt: string;
-  width?: number;
-  height?: number;
+  width?: number | null;
+  height?: number | null;
   mimeType?: string;
+  attribution?: string | null;
+  license?: string | null;
 }
 
 export interface StoryAuthor {
   id: string;
   name: string;
   slug: string;
-  bio?: string;
-  avatar?: StoryImageAsset;
+  bio?: string | null;
+  /** Avatar image URL. */
+  avatar?: string | null;
 }
 
 export interface StoryTaxonomyItem {
@@ -41,7 +57,7 @@ export interface StorySeo {
   canonicalUrl?: string;
   ogTitle?: string;
   ogDescription?: string;
-  ogImage?: string;
+  ogImage?: string | null;
   twitterCard?: "summary" | "summary_large_image";
   noindex?: boolean;
 }
@@ -55,6 +71,27 @@ export interface StorySettings {
 
 export type StoryBodyBlock = Record<string, unknown>;
 
+export interface StoryTableOfContentsItem {
+  blockId: string;
+  title: string;
+  level: number;
+}
+
+export interface PublishedSourceAttribution {
+  sourceName: string;
+  sourceUrl: string | null;
+  credibilityScore: number;
+  quote: string | null;
+}
+
+/** Another published language version of the same article. */
+export interface StoryTranslation {
+  language: string;
+  title: string;
+  slug: string;
+  url: string;
+}
+
 export interface PublishedStoryDocument {
   id: string;
   type: string;
@@ -63,20 +100,28 @@ export interface PublishedStoryDocument {
   url: string;
   language: string;
   title: string;
-  subtitle?: string;
+  subtitle?: string | null;
   excerpt: string;
+  teaser?: string;
   featuredImage?: StoryImageAsset | null;
   authors: StoryAuthor[];
   categories: StoryTaxonomyItem[];
   tags: StoryTaxonomyItem[];
   contentHtml: string;
   body: StoryBodyBlock[];
+  tableOfContents?: StoryTableOfContentsItem[];
   seo: StorySeo;
   settings?: StorySettings;
+  wordCount?: number;
   readingTimeMinutes: number;
-  publishedAt: string;
+  publishedAt: string | null;
   updatedAt: string;
   createdAt: string;
+  finalQualityScore?: number | null;
+  qualityReviewIterations?: number;
+  viewCount?: number;
+  sourceAttributions?: PublishedSourceAttribution[];
+  translations?: StoryTranslation[];
 }
 
 export interface PublishedStoriesFeedResponse {
@@ -86,21 +131,27 @@ export interface PublishedStoriesFeedResponse {
 
 export interface StorySummary {
   id: string;
+  language: string;
   headline: string;
   slug: string;
   summary: string;
+  teaser: string;
   publishedAt: string | null;
   featuredImageUrl: string | null;
   readingTimeMinutes: number;
   primaryCategory: string | null;
   finalQualityScore: number | null;
   qualityReviewIterations: number;
+  translations: StoryTranslation[];
 }
 
 export interface SourceAttribution {
-  id: string;
-  storyId: string;
-  sourceId: string;
+  /** Not exposed by the public API; always undefined from the SDK. */
+  id?: string;
+  /** Not exposed by the public API; always undefined from the SDK. */
+  storyId?: string;
+  /** Not exposed by the public API; always undefined from the SDK. */
+  sourceId?: string;
   sourceName: string;
   sourceUrl: string | null;
   quote: string | null;
@@ -115,8 +166,10 @@ export interface Story {
   title: string;
   subtitle: string | null;
   excerpt: string;
+  teaser: string;
   contentHtml: string;
   body: StoryBodyBlock[];
+  tableOfContents: StoryTableOfContentsItem[];
   featuredImage: StoryImageAsset | null;
   authors: StoryAuthor[];
   categories: StoryTaxonomyItem[];
@@ -150,6 +203,8 @@ export interface Story {
   qualityReviewIterations: number;
   viewCount: number;
   sourceAttributions: SourceAttribution[];
+  /** Other published language versions of this article (for language switchers and hreflang). */
+  translations: StoryTranslation[];
 }
 
 export interface StoriesPagination {

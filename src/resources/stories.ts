@@ -1,10 +1,12 @@
 import { HttpClient } from "../client.js";
 import { StorydockApiError } from "../errors.js";
 import type {
+  GetStoryInput,
+  ListStoriesInput,
   PaginatedStoriesResponse,
-  PaginationInput,
   PublishedStoriesFeedResponse,
   PublishedStoryDocument,
+  SourceAttribution,
   Story,
   StorySummary,
 } from "../types.js";
@@ -13,19 +15,22 @@ const PRIMARY_PUBLISHED_SCHEMA_PATH = "/api/feeds/published-schema";
 const FALLBACK_PUBLISHED_SCHEMA_PATH = "/api/feed/published-schema";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
-const MAX_PUBLISHED_STORIES = 200;
-const STORY_LOOKUP_PAGE_SIZE = 50;
+// The published-schema feed returns at most 200 stories per page.
+const MAX_PAGE_SIZE = 200;
+// Slug lookups page through the feed and stop after this many pages (10,000 stories).
+const MAX_STORY_LOOKUP_PAGES = 50;
 
 export class StoriesResource {
   constructor(private readonly httpClient: HttpClient) {}
 
-  async list(input: PaginationInput = {}): Promise<PaginatedStoriesResponse> {
+  async list(input: ListStoriesInput = {}): Promise<PaginatedStoriesResponse> {
     const page = normalizePositiveInteger(input.page, DEFAULT_PAGE);
     const pageSize = normalizePositiveInteger(input.pageSize, DEFAULT_PAGE_SIZE);
-    const take = Math.min(pageSize, MAX_PUBLISHED_STORIES);
-    const response = await this.fetchPublishedStoriesPage(page, take);
+    const take = Math.min(pageSize, MAX_PAGE_SIZE);
+    const response = await this.fetchPublishedStoriesPage(page, take, input.language);
     const storyPage = response.data.map(mapDocumentToStorySummary);
-    const hasMore = response.data.length === take && page * take < MAX_PUBLISHED_STORIES;
+    // The feed does not report a total, so a full page means there may be another one.
+    const hasMore = response.data.length === take;
     const knownCount = (page - 1) * take + response.data.length;
 
     return {
@@ -39,13 +44,13 @@ export class StoriesResource {
     };
   }
 
-  async get(slug: string): Promise<Story> {
+  async get(slug: string, input: GetStoryInput = {}): Promise<Story> {
     if (!slug || !slug.trim()) {
       throw new Error("slug is required");
     }
 
     const normalizedSlug = slug.trim();
-    const document = await this.findStoryBySlug(normalizedSlug);
+    const document = await this.findStoryBySlug(normalizedSlug, input.language);
 
     if (!document) {
       throw new StorydockApiError(`Story not found: ${normalizedSlug}`, {
@@ -59,12 +64,17 @@ export class StoriesResource {
     return mapDocumentToStory(document);
   }
 
-  private async fetchPublishedStoriesPage(page: number, take: number): Promise<PublishedStoriesFeedResponse> {
+  private async fetchPublishedStoriesPage(
+    page: number,
+    take: number,
+    language?: string
+  ): Promise<PublishedStoriesFeedResponse> {
+    const query = { page, take, language: language?.trim() || undefined };
     try {
       return normalizeFeedResponse(
         await this.httpClient.getJson<PublishedStoriesFeedResponse | PublishedStoryDocument[]>({
           path: PRIMARY_PUBLISHED_SCHEMA_PATH,
-          query: { page, take },
+          query,
         }),
         page
       );
@@ -76,25 +86,23 @@ export class StoriesResource {
       return normalizeFeedResponse(
         await this.httpClient.getJson<PublishedStoriesFeedResponse | PublishedStoryDocument[]>({
           path: FALLBACK_PUBLISHED_SCHEMA_PATH,
-          query: { page, take },
+          query,
         }),
         page
       );
     }
   }
 
-  private async findStoryBySlug(slug: string): Promise<PublishedStoryDocument | undefined> {
-    const maxPages = Math.max(1, Math.ceil(MAX_PUBLISHED_STORIES / STORY_LOOKUP_PAGE_SIZE));
-
-    for (let page = DEFAULT_PAGE; page <= maxPages; page += 1) {
-      const response = await this.fetchPublishedStoriesPage(page, STORY_LOOKUP_PAGE_SIZE);
+  private async findStoryBySlug(slug: string, language?: string): Promise<PublishedStoryDocument | undefined> {
+    for (let page = DEFAULT_PAGE; page <= MAX_STORY_LOOKUP_PAGES; page += 1) {
+      const response = await this.fetchPublishedStoriesPage(page, MAX_PAGE_SIZE, language);
       const match = response.data.find((candidate) => candidate.slug === slug);
 
       if (match) {
         return match;
       }
 
-      if (response.data.length < STORY_LOOKUP_PAGE_SIZE) {
+      if (response.data.length < MAX_PAGE_SIZE) {
         return undefined;
       }
     }
@@ -123,16 +131,28 @@ function normalizeFeedResponse(
 function mapDocumentToStorySummary(document: PublishedStoryDocument): StorySummary {
   return {
     id: document.id,
+    language: document.language,
     headline: document.title,
     slug: document.slug,
     summary: document.excerpt,
-    publishedAt: document.publishedAt,
+    teaser: document.teaser ?? "",
+    publishedAt: document.publishedAt ?? null,
     featuredImageUrl: document.featuredImage?.url ?? null,
     readingTimeMinutes: document.readingTimeMinutes,
     primaryCategory: document.categories[0]?.name ?? null,
-    finalQualityScore: null,
-    qualityReviewIterations: 0,
+    finalQualityScore: document.finalQualityScore ?? null,
+    qualityReviewIterations: document.qualityReviewIterations ?? 0,
+    translations: document.translations ?? [],
   };
+}
+
+function mapSourceAttributions(document: PublishedStoryDocument): SourceAttribution[] {
+  return (document.sourceAttributions ?? []).map((source) => ({
+    sourceName: source.sourceName,
+    sourceUrl: source.sourceUrl ?? null,
+    quote: source.quote ?? null,
+    credibilityScore: source.credibilityScore,
+  }));
 }
 
 function mapDocumentToStory(document: PublishedStoryDocument): Story {
@@ -144,8 +164,10 @@ function mapDocumentToStory(document: PublishedStoryDocument): Story {
     title: document.title,
     subtitle: document.subtitle ?? null,
     excerpt: document.excerpt,
+    teaser: document.teaser ?? "",
     contentHtml: document.contentHtml,
     body: document.body,
+    tableOfContents: document.tableOfContents ?? [],
     featuredImage: document.featuredImage ?? null,
     authors: document.authors,
     categories: document.categories,
@@ -160,25 +182,26 @@ function mapDocumentToStory(document: PublishedStoryDocument): Story {
     slug: document.slug,
     content: document.contentHtml,
     summary: document.excerpt,
-    wordCount: 0,
+    wordCount: document.wordCount ?? 0,
     status: mapStatus(document.status),
-    publishedAt: document.publishedAt,
+    publishedAt: document.publishedAt ?? null,
     createdAt: document.createdAt,
     lastModified: document.updatedAt,
     tags: document.tags.map((tag) => tag.name),
     primaryCategory: document.categories[0]?.name ?? null,
     featuredImageUrl: document.featuredImage?.url ?? null,
-    featuredImageAttribution: null,
+    featuredImageAttribution: document.featuredImage?.attribution ?? null,
     featuredImageAlt: document.featuredImage?.alt ?? null,
-    featuredImageLicense: null,
+    featuredImageLicense: document.featuredImage?.license ?? null,
     seoTitle: document.seo.metaTitle,
     seoDescription: document.seo.metaDescription,
     canonicalUrl: document.seo.canonicalUrl ?? null,
     readingTimeMinutes: document.readingTimeMinutes,
-    finalQualityScore: null,
-    qualityReviewIterations: 0,
-    viewCount: 0,
-    sourceAttributions: [],
+    finalQualityScore: document.finalQualityScore ?? null,
+    qualityReviewIterations: document.qualityReviewIterations ?? 0,
+    viewCount: document.viewCount ?? 0,
+    sourceAttributions: mapSourceAttributions(document),
+    translations: document.translations ?? [],
   };
 }
 

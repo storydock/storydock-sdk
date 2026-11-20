@@ -1,13 +1,17 @@
 import { HttpClient } from "./client.js";
 import { StoriesResource } from "./resources/stories.js";
-import type { ClientOptions, PaginatedStoriesResponse, PaginationInput, Story } from "./types.js";
+import type { ClientOptions, GetStoryInput, ListStoriesInput, PaginatedStoriesResponse, Story } from "./types.js";
 
 export { StorydockApiConfigurationError, StorydockApiError } from "./errors.js";
 export type {
   ClientOptions,
   FetchLike,
+  GetStoryInput,
+  LanguageInput,
+  ListStoriesInput,
   PaginatedStoriesResponse,
   PaginationInput,
+  PublishedSourceAttribution,
   PublishedStoryDocument,
   PublishedStoriesFeedResponse,
   SourceAttribution,
@@ -19,7 +23,9 @@ export type {
   StoriesPagination,
   Story,
   StorySummary,
+  StoryTableOfContentsItem,
   StoryTaxonomyItem,
+  StoryTranslation,
 } from "./types.js";
 
 export class StorydockClient {
@@ -30,12 +36,12 @@ export class StorydockClient {
     this.stories = new StoriesResource(httpClient);
   }
 
-  listStories(input?: PaginationInput): Promise<PaginatedStoriesResponse> {
+  listStories(input?: ListStoriesInput): Promise<PaginatedStoriesResponse> {
     return this.stories.list(input);
   }
 
-  getStory(slug: string): Promise<Story> {
-    return this.stories.get(slug);
+  getStory(slug: string, input?: GetStoryInput): Promise<Story> {
+    return this.stories.get(slug, input);
   }
 }
 
